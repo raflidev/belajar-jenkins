@@ -1,0 +1,14 @@
+{
+  "name": "belajar-jenkins-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aplikasi sederhana untuk belajar deploy dengan Jenkins lokal",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
