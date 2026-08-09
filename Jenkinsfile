@@ -1,10 +1,6 @@
 pipeline {
     agent any
 
-    tools {
-        nodejs 'NodeJS 20'
-    }
-
     options {
         timestamps()
         disableConcurrentBuilds()
@@ -23,14 +19,15 @@ pipeline {
             }
         }
 
-        stage('Install') {
+        stage('Install & Test') {
+            agent {
+                docker {
+                    image 'node:20-alpine'
+                    reuseNode true
+                }
+            }
             steps {
                 sh 'npm ci'
-            }
-        }
-
-        stage('Test') {
-            steps {
                 sh 'npm test'
             }
         }

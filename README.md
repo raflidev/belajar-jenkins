@@ -48,26 +48,20 @@ docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 
 Lanjutkan wizard, pilih "Install suggested plugins".
 
-### 2. Install & konfigurasi Node.js sebagai global tool
+### 2. Install plugin Docker Pipeline
 
-Image `jenkins/jenkins:lts` cuma berisi JDK + git, tidak ada Node.js/npm. Stage
-`Install`/`Test` di `Jenkinsfile` butuh `npm` ada di PATH, jadi ini wajib
-sebelum build pertama:
+Image `jenkins/jenkins:lts` cuma berisi JDK + git, tidak ada Node.js/npm.
+Daripada install Node.js langsung di Jenkins (plugin NodeJS meng-unpack
+ribuan file kecil ke volume `jenkins_home`, dan di Docker Desktop ini sering
+sangat lambat / bisa menggantung bermenit-menit), stage `Install & Test` di
+`Jenkinsfile` menjalankan `npm` di dalam container `node:20-alpine` lewat
+Docker socket yang sudah kamu mount di langkah 1.
 
-1. **Manage Jenkins → Plugins → Available plugins** → cari **NodeJS** → install
-   (centang "Restart Jenkins after install" kalau ditawarkan).
-2. **Manage Jenkins → Tools** → scroll ke **NodeJS installations** → **Add NodeJS**:
-   - Name: `NodeJS 20` (harus persis sama dengan yang dipakai di `Jenkinsfile`,
-     lihat blok `tools { nodejs 'NodeJS 20' }`).
-   - Version: pilih versi 20.x apa saja.
-   - Biarkan "Install automatically" tercentang — Jenkins akan download
-     Node sendiri saat build pertama jalan, tidak perlu install manual di
-     container.
-3. Save.
-
-Kalau nama tool di Jenkins beda dengan yang ada di `Jenkinsfile`, build akan
-gagal dengan error `Tool type "nodejs" does not have an install of "NodeJS 20"` —
-tinggal samakan namanya di salah satu sisi.
+1. **Manage Jenkins → Plugins → Available plugins** → cari **Docker Pipeline**
+   → install (centang "Restart Jenkins after install" kalau ditawarkan).
+2. Selesai — tidak perlu konfigurasi tool tambahan. Saat build jalan, Jenkins
+   akan `docker pull node:20-alpine` (image kecil, ~40MB, cepat) lalu jalankan
+   `npm ci` & `npm test` di dalamnya, dengan workspace yang sama (`reuseNode true`).
 
 ### 3. Init git repo ini
 
