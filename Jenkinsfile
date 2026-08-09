@@ -19,16 +19,9 @@ pipeline {
             }
         }
 
-        stage('Install & Test') {
-            agent {
-                docker {
-                    image 'node:20-alpine'
-                    reuseNode true
-                }
-            }
+        stage('Test') {
             steps {
-                sh 'npm ci'
-                sh 'npm test'
+                sh "docker build --target test -t ${IMAGE_NAME}:test ."
             }
         }
 
