@@ -9,8 +9,13 @@ yang install, test, build image Docker, lalu deploy container-nya secara lokal.
 
 - `server.js` — server HTTP pakai modul `http` bawaan Node, tanpa dependency.
 - `test/server.test.js` — 3 test pakai `node --test` bawaan Node (tanpa Jest/Mocha).
-- `Dockerfile` — build image image `node:20-alpine` yang menjalankan `server.js`.
-- `Jenkinsfile` — pipeline dengan stage: Checkout → Install → Test → Build Image → Deploy → Smoke Test.
+- `Dockerfile` — multi-stage: stage `test` menjalankan `npm ci && npm test`
+  (build gagal kalau test gagal), stage final cuma copy `server.js` + install
+  dependency production untuk image yang dijalankan.
+- `Jenkinsfile` — pipeline dengan stage: Checkout → Test → Build Image → Deploy → Smoke Test.
+- `jenkins/Dockerfile` — image Jenkins custom (`jenkins/jenkins:lts` + docker CLI),
+  dipakai supaya stage `docker build`/`docker run` di pipeline bisa jalan
+  (lihat langkah 1 di bawah).
 
 ## Coba lokal dulu (tanpa Jenkins)
 
@@ -25,43 +30,59 @@ curl localhost:3000/health
 Butuh Docker Desktop (atau Docker Engine) sudah jalan, karena stage
 Build/Deploy di `Jenkinsfile` memanggil `docker` langsung di host Jenkins.
 
-### 1. Jalankan Jenkins via Docker (paling cepat untuk belajar)
+### 1. Jalankan Jenkins via Docker, dengan akses ke Docker daemon host
 
-Jenkins dijalankan sebagai container, tapi diberi akses ke Docker CLI + socket
-Docker Desktop di host supaya stage `docker build` / `docker run` di pipeline
-bisa jalan:
+Jenkins dijalankan sebagai container. Supaya stage `docker build`/`docker run`
+di pipeline bisa jalan, container Jenkins butuh: (a) docker CLI, dan (b) akses
+ke socket Docker daemon host.
+
+**Docker CLI tidak bisa sekadar di-mount dari host** kalau host-nya macOS —
+binary `docker` di Mac itu Mach-O, tidak bisa dieksekusi di container Linux.
+Solusinya: build image Jenkins custom yang sudah include docker CLI Linux
+(`jenkins/Dockerfile` di repo ini):
 
 ```bash
-docker run -d --name jenkins \
-  -p 8080:8080 -p 50000:50000 \
-  -v jenkins_home:/var/jenkins_home \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -v $(which docker):/usr/bin/docker \
-  jenkins/jenkins:lts
+docker build -t jenkins-with-docker jenkins/
 ```
 
-Buka `http://localhost:8080`, ambil password awal dengan:
+Lalu jalankan. Socket `/var/run/docker.sock` di Docker Desktop dimiliki
+`root:root` mode 660, jadi container juga perlu jalan sebagai root
+(`-u root`) supaya bisa mengaksesnya — untuk instance Jenkins lokal/belajar
+ini bukan masalah keamanan yang berarti:
 
 ```bash
-docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+docker run -d --name jenkins-server \
+  -p 8090:8080 -p 50000:50000 \
+  -u root \
+  -v jenkins_home:/var/jenkins_home \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  jenkins-with-docker
+```
+
+(Sesuaikan `-p 8090:8080` dan nama volume/container kalau kamu pakai port
+atau nama lain.)
+
+Buka `http://localhost:8090`, ambil password awal dengan:
+
+```bash
+docker exec jenkins-server cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
 Lanjutkan wizard, pilih "Install suggested plugins".
 
-### 2. Install plugin Docker Pipeline
+### 2. Tidak perlu install Node.js atau plugin Docker Pipeline
 
-Image `jenkins/jenkins:lts` cuma berisi JDK + git, tidak ada Node.js/npm.
-Daripada install Node.js langsung di Jenkins (plugin NodeJS meng-unpack
-ribuan file kecil ke volume `jenkins_home`, dan di Docker Desktop ini sering
-sangat lambat / bisa menggantung bermenit-menit), stage `Install & Test` di
-`Jenkinsfile` menjalankan `npm` di dalam container `node:20-alpine` lewat
-Docker socket yang sudah kamu mount di langkah 1.
+Stage `Test` & `Build Image` di `Jenkinsfile` cuma memanggil `docker build`
+(lewat socket yang sudah di-mount di langkah 1); `npm ci`/`npm test` jalan
+*di dalam* build itu (lihat stage `test` di `Dockerfile`). Tidak butuh plugin
+NodeJS ataupun Docker Pipeline sama sekali.
 
-1. **Manage Jenkins → Plugins → Available plugins** → cari **Docker Pipeline**
-   → install (centang "Restart Jenkins after install" kalau ditawarkan).
-2. Selesai — tidak perlu konfigurasi tool tambahan. Saat build jalan, Jenkins
-   akan `docker pull node:20-alpine` (image kecil, ~40MB, cepat) lalu jalankan
-   `npm ci` & `npm test` di dalamnya, dengan workspace yang sama (`reuseNode true`).
+(Kenapa bukan `docker run -v $WORKSPACE:...` untuk jalanin test langsung?
+Karena Jenkins di sini jalan di dalam container yang cuma numpang socket
+Docker host — path `$WORKSPACE` di dalam container Jenkins itu tidak
+otomatis nyambung ke path yang sama di host, jadi bind-mount volume akan
+salah/kosong. `docker build` aman karena isi folder dikirim sebagai build
+context, bukan bind-mount.)
 
 ### 3. Init git repo ini
 
