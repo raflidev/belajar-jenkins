@@ -48,7 +48,28 @@ docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 
 Lanjutkan wizard, pilih "Install suggested plugins".
 
-### 2. Init git repo ini
+### 2. Install & konfigurasi Node.js sebagai global tool
+
+Image `jenkins/jenkins:lts` cuma berisi JDK + git, tidak ada Node.js/npm. Stage
+`Install`/`Test` di `Jenkinsfile` butuh `npm` ada di PATH, jadi ini wajib
+sebelum build pertama:
+
+1. **Manage Jenkins → Plugins → Available plugins** → cari **NodeJS** → install
+   (centang "Restart Jenkins after install" kalau ditawarkan).
+2. **Manage Jenkins → Tools** → scroll ke **NodeJS installations** → **Add NodeJS**:
+   - Name: `NodeJS 20` (harus persis sama dengan yang dipakai di `Jenkinsfile`,
+     lihat blok `tools { nodejs 'NodeJS 20' }`).
+   - Version: pilih versi 20.x apa saja.
+   - Biarkan "Install automatically" tercentang — Jenkins akan download
+     Node sendiri saat build pertama jalan, tidak perlu install manual di
+     container.
+3. Save.
+
+Kalau nama tool di Jenkins beda dengan yang ada di `Jenkinsfile`, build akan
+gagal dengan error `Tool type "nodejs" does not have an install of "NodeJS 20"` —
+tinggal samakan namanya di salah satu sisi.
+
+### 3. Init git repo ini
 
 Jenkins job akan pull dari repo git lokal ini:
 
@@ -58,7 +79,7 @@ git add .
 git commit -m "init: aplikasi sederhana + Jenkinsfile"
 ```
 
-### 3. Buat Pipeline job
+### 4. Buat Pipeline job
 
 1. Jenkins dashboard → **New Item** → nama bebas → pilih **Pipeline** → OK.
 2. Di bagian **Pipeline**, Definition pilih **Pipeline script from SCM**.
@@ -71,7 +92,7 @@ git commit -m "init: aplikasi sederhana + Jenkinsfile"
 5. Script Path biarkan default: `Jenkinsfile`.
 6. Save → **Build Now**.
 
-### 4. Lihat hasilnya
+### 5. Lihat hasilnya
 
 Setelah build sukses, cek dari host:
 
