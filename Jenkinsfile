@@ -42,7 +42,7 @@ pipeline {
 
         stage('Smoke Test') {
             steps {
-                sh "sleep 2 && curl -f http://localhost:${APP_PORT}/health"
+                sh "sleep 2 && docker exec ${CONTAINER_NAME} wget -qO- http://localhost:3000/health"
             }
         }
     }
